@@ -1,0 +1,159 @@
+import java.util.*;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q3 — DFS Reachability & Post-order
+// LLVM optimiser: dead-code elimination on a Control-Flow Graph
+// ─────────────────────────────────────────────────────────────────────────────
+
+public class Q3_DFS_DeadCode {
+
+    // ── Build the CFG as an adjacency list ────────────────────────────────────
+    static Map<String, List<String>> buildCFG() {
+        Map<String, List<String>> cfg = new LinkedHashMap<>();
+
+        // All 9 blocks must be present as keys (even if some have no successors)
+        for (String b : new String[]{"B0","B1","B2","B3","B4","B5","B6","B7","B8"})
+            cfg.put(b, new ArrayList<>());
+
+        // CFG edges after the redundant-if elimination pass
+        cfg.get("B0").addAll(Arrays.asList("B1","B2"));
+        cfg.get("B1").addAll(Arrays.asList("B3","B4"));
+        cfg.get("B2").addAll(Arrays.asList("B5"));
+        cfg.get("B3").addAll(Arrays.asList("B6"));
+        cfg.get("B4").addAll(Arrays.asList("B6"));
+        cfg.get("B5").addAll(Arrays.asList("B6"));
+        cfg.get("B6").addAll(Arrays.asList("B8"));
+        cfg.get("B7").addAll(Arrays.asList("B8"));   // B7 is dead — no incoming reachable edge
+        // B8 has no successors
+
+        return cfg;
+    }
+
+    // ── TODO 1: Iterative DFS — returns set of dead (unreachable) blocks ──────
+    static Set<String> findDeadBlocks(Map<String, List<String>> cfg, String entry) {
+        Set<String> visited = new HashSet<>();
+        Deque<String> stack = new ArrayDeque<>();
+        stack.push(entry);
+
+        while (!stack.isEmpty()) {
+            String node = stack.pop();
+            if (visited.contains(node)) continue;
+            visited.add(node);
+
+            // Push successors in reverse-alphabetical order so alphabetically
+            // first successor lands on top of the stack (consistent hand-trace)
+            List<String> succs = new ArrayList<>(cfg.getOrDefault(node, List.of()));
+            succs.sort(Collections.reverseOrder());
+            for (String s : succs)
+                if (!visited.contains(s)) stack.push(s);
+        }
+
+        Set<String> dead = new HashSet<>(cfg.keySet());
+        dead.removeAll(visited);
+        return dead;
+    }
+
+    // ── TODO 2: Post-order traversal of reachable blocks (two-stack method) ───
+    static List<String> computePostOrder(Map<String, List<String>> cfg, String entry) {
+        Set<String>  visited = new HashSet<>();
+        List<String> order   = new ArrayList<>();
+        Deque<String> stack1 = new ArrayDeque<>();  // exploration stack
+        Deque<String> stack2 = new ArrayDeque<>();  // post-order accumulator
+
+        stack1.push(entry);
+        while (!stack1.isEmpty()) {
+            String node = stack1.pop();
+            if (visited.contains(node)) continue;
+            visited.add(node);
+            stack2.push(node);   // will be popped after all descendants are done
+
+            // Push successors in alphabetical order onto stack1
+            List<String> succs = new ArrayList<>(cfg.getOrDefault(node, List.of()));
+            Collections.sort(succs);
+            for (String s : succs)
+                if (!visited.contains(s)) stack1.push(s);
+        }
+
+        // Drain stack2 → produces post-order
+        while (!stack2.isEmpty()) order.add(stack2.pop());
+        return order;
+    }
+
+    // ── DFS stack trace (verbose, for part-a hand-trace reproduction) ─────────
+    static void verboseDFS(Map<String, List<String>> cfg, String entry) {
+        System.out.println("=== Iterative DFS Stack Trace (alphabetical edge order) ===");
+        System.out.printf("%-12s  %-45s  %-40s  %s%n",
+                          "Top of Stack", "Action", "Stack after", "Visited after");
+        System.out.println("-".repeat(135));
+
+        Set<String>   visited = new LinkedHashSet<>();
+        Deque<String> stack   = new ArrayDeque<>();
+        stack.push(entry);
+
+        System.out.printf("%-12s  %-45s  %-40s  %s%n",
+                          "—", "Init: push " + entry, stack.toString(), visited.toString());
+
+        while (!stack.isEmpty()) {
+            String node = stack.peek();
+            if (visited.contains(node)) { stack.pop(); continue; }
+
+            stack.pop();
+            visited.add(node);
+
+            List<String> succs = new ArrayList<>(cfg.getOrDefault(node, List.of()));
+            succs.sort(Collections.reverseOrder());   // reverse → alphabetical on stack
+            List<String> pushed = new ArrayList<>();
+            for (String s : succs)
+                if (!visited.contains(s)) { stack.push(s); pushed.add(s); }
+
+            String action = pushed.isEmpty()
+                ? "Pop " + node + ", mark visited. No unvisited successors."
+                : "Pop " + node + ", mark visited. Push " + pushed;
+            System.out.printf("%-12s  %-45s  %-40s  %s%n",
+                              node, action, stack.toString(), visited.toString());
+        }
+    }
+
+    public static void main(String[] args) {
+        Map<String, List<String>> cfg = buildCFG();
+
+        // ── Part (a): DFS stack trace ─────────────────────────────────────────
+        verboseDFS(cfg, "B0");
+
+        Set<String> dead      = findDeadBlocks(cfg, "B0");
+        Set<String> reachable = new TreeSet<>(cfg.keySet());
+        reachable.removeAll(dead);
+
+        System.out.println("\n=== Reachability Results ===");
+        System.out.println("Reachable blocks : " + new TreeSet<>(reachable));
+        System.out.println("Dead blocks      : " + new TreeSet<>(dead));
+        System.out.println("B8 status        : " +
+            (reachable.contains("B8") ? "ALIVE (reached via B6→B8)" : "DEAD"));
+
+        // ── Part (b): post-order ──────────────────────────────────────────────
+        List<String> postOrder = computePostOrder(cfg, "B0");
+
+        System.out.println("\n=== Post-Order Traversal ===");
+        System.out.println("Post-order  : " + postOrder);
+
+        List<String> rpo = new ArrayList<>(postOrder);
+        Collections.reverse(rpo);
+        System.out.println("Reverse PO  : " + rpo);
+
+        System.out.println("\n=== RPO Indices (used by forward-flow dataflow passes) ===");
+        System.out.printf("%-8s  %-10s  %s%n", "Block", "PO index", "RPO index");
+        for (int i = 0; i < postOrder.size(); i++)
+            System.out.printf("%-8s  %-10d  %d%n",
+                              postOrder.get(i), i, postOrder.size() - 1 - i);
+
+        // ── Part (c): why RPO matters (printed summary) ───────────────────────
+        System.out.println("\n=== Part (c): RPO & Dataflow Convergence Summary ===");
+        System.out.println("(i)  In RPO, each block has a lower index than all its successors.");
+        System.out.println("     => For forward-flow problems, predecessors are always processed first.");
+        System.out.println("(ii) Acyclic CFG: converges in exactly 1 pass with RPO.");
+        System.out.println("     Arbitrary order: up to (n-1) passes in worst case.");
+        System.out.println("(iii)Cyclic CFG (loops): RPO still minimises extra passes.");
+        System.out.println("     Loop of nesting depth d requires d+1 passes (back-edge re-visits).");
+        System.out.println("     Arbitrary order may add avoidable extra passes outside the loop.");
+    }
+}
