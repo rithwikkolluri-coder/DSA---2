@@ -1,0 +1,22 @@
+ 
+static List<String> findOverlapping(IntervalNode node, int lo, int hi, List<String> results) 
+{ 
+if (results == null) results = new ArrayList<>(); 
+if (node == null) return results; 
+// TODO 1: Prune — if lo > subtree's maxEnd, nothing here overlaps. 
+if (lo > node.maxEnd) return results;                  // PRUNE 
+// TODO 2: Recurse into left subtree (it may contain overlapping intervals). 
+findOverlapping(node.left, lo, hi, results); 
+ 
+    // TODO 3: Check this node's own interval. 
+    if (node.start <= hi && node.end >= lo)                // overlap test 
+        results.add(node.streamId); 
+ 
+    // TODO 4: Recurse into right subtree only if node.start <= hi 
+    //         (all right-subtree starts >= node.start, so if node.start > hi 
+    //          none of them can overlap either). 
+    if (node.start <= hi) 
+        findOverlapping(node.right, lo, hi, results); 
+ 
+    return results; 
+}
