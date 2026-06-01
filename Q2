@@ -1,1 +1,106 @@
+import java.util.*;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Q2 — Sparse Table (Range-Minimum Query)
+// Spotify listener-fatigue analysis on per-user skip-event arrays
+// ─────────────────────────────────────────────────────────────────────────────
+
+public class Q2_SparseTable {
+
+    static class SparseTableMin {
+        int[][] table;   // table[k][i] = min over arr[i .. i + 2^k - 1]
+        int K, n;
+
+        SparseTableMin(int[] arr) {
+            n = arr.length;
+            K = (int)(Math.log(n) / Math.log(2)) + 1;   // number of levels
+            table = new int[K][n];
+
+            // TODO 1 — build sparse table in O(n log n)
+            // Row k=0: copy the array directly
+            for (int i = 0; i < n; i++)
+                table[0][i] = arr[i];
+
+            // Rows k=1..K-1: each entry covers twice the window of the row below
+            for (int k = 1; k < K; k++) {
+                int half = 1 << (k - 1);                 // 2^(k-1)
+                for (int i = 0; i + (1 << k) <= n; i++) {
+                    table[k][i] = Math.min(table[k-1][i],
+                                           table[k-1][i + half]);
+                }
+            }
+        }
+
+        /** O(1) range-min query over arr[lo .. hi] inclusive. */
+        int queryMin(int lo, int hi) {
+            int length = hi - lo + 1;
+            int k = (int)(Math.log(length) / Math.log(2));
+
+            // TODO 2 — two overlapping windows of size 2^k cover [lo..hi]
+            int left  = table[k][lo];                    // window [lo .. lo+2^k-1]
+            int right = table[k][hi - (1 << k) + 1];    // window [hi-2^k+1 .. hi]
+            return Math.min(left, right);
+        }
+
+        /** Print the full sparse table for inspection. */
+        void print(int n) {
+            System.out.println("=== Sparse Table ===");
+            for (int k = 0; k < K; k++) {
+                System.out.printf("k=%d: ", k);
+                for (int i = 0; i + (1 << k) <= n; i++)
+                    System.out.printf("table[%d][%d]=%-4d ", k, i, table[k][i]);
+                System.out.println();
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        int[] skipPositions = {42, 18, 55, 9, 31, 22, 6, 47};
+
+        SparseTableMin st = new SparseTableMin(skipPositions);
+        st.print(skipPositions.length);
+
+        // ── Hand-verification ────────────────────────────────────────────────
+        System.out.println("\n=== Hand Verification ===");
+        System.out.printf("table[2][1] = %d  (min of arr[1..4]=[18,55,9,31])  expected 9%n",
+                          st.table[2][1]);
+        System.out.printf("table[2][3] = %d  (min of arr[3..6]=[9,31,22,6])   expected 6%n",
+                          st.table[2][3]);
+        System.out.printf("table[1][5] = %d  (min of arr[5..6]=[22,6])        expected 6%n",
+                          st.table[1][5]);
+
+        // ── Range-min queries ────────────────────────────────────────────────
+        System.out.println("\n=== Range-Min Queries ===");
+        System.out.printf("query_min(1, 6) = %d  (expected 6)%n", st.queryMin(1, 6));
+        System.out.printf("query_min(2, 5) = %d  (expected 9)%n", st.queryMin(2, 5));
+
+        // ── Workload comparison (part c) ─────────────────────────────────────
+        int n        = 1024;
+        int logN     = (int)(Math.log(n) / Math.log(2));   // 10
+        int rebuild  = n * logN;                            // 10 240
+
+        int[][] mixes = { {50, 5}, {50, 50}, {5, 50}, {50, 0} };
+        String[] labels = {
+            "Spotify 10:1   (50Q, 5U)",
+            "Balanced 1:1   (50Q,50U)",
+            "Update-heavy   (5Q, 50U)",
+            "Read-only      (50Q, 0U)",
+        };
+
+        System.out.println("\n=== Workload Comparison (n=1024, logN=10) ===");
+        System.out.printf("%-28s  %12s  %12s  %s%n",
+                          "Mix", "SparseTable", "SegmentTree", "Winner");
+        for (int i = 0; i < mixes.length; i++) {
+            int Q = mixes[i][0], U = mixes[i][1];
+            long stOps  = (long)Q * 1 + (long)U * rebuild;
+            long segOps = (long)(Q + U) * logN;
+            String winner = stOps <= segOps ? "Sparse Table" : "Segment Tree";
+            System.out.printf("%-28s  %12d  %12d  %s%n",
+                              labels[i], stOps, segOps, winner);
+        }
+
+        // Break-even: Q + 10240*U = 10*(Q+U)  =>  Q/U ≈ 1137
+        System.out.printf("%nBreak-even Q/U threshold: %.1f  (sparse table wins only above this ratio)%n",
+                          (double)(rebuild - logN) / (logN - 1));
+    }
+}
