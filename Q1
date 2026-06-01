@@ -1,22 +1,109 @@
- 
-static List<String> findOverlapping(IntervalNode node, int lo, int hi, List<String> results) 
-{ 
-if (results == null) results = new ArrayList<>(); 
-if (node == null) return results; 
-// TODO 1: Prune — if lo > subtree's maxEnd, nothing here overlaps. 
-if (lo > node.maxEnd) return results;                  // PRUNE 
-// TODO 2: Recurse into left subtree (it may contain overlapping intervals). 
-findOverlapping(node.left, lo, hi, results); 
- 
-    // TODO 3: Check this node's own interval. 
-    if (node.start <= hi && node.end >= lo)                // overlap test 
-        results.add(node.streamId); 
- 
-    // TODO 4: Recurse into right subtree only if node.start <= hi 
-    //         (all right-subtree starts >= node.start, so if node.start > hi 
-    //          none of them can overlap either). 
-    if (node.start <= hi) 
-        findOverlapping(node.right, lo, hi, results); 
- 
-    return results; 
+import java.util.*;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q1 — Interval Tree (Augmented BST)
+// Splunk On-Call: find all log streams active during an incident window
+// ─────────────────────────────────────────────────────────────────────────────
+
+class IntervalNode {
+    int start, end;
+    int maxEnd;          // max `end` over this node's subtree (augmentation)
+    String streamId;
+    IntervalNode left, right;
+
+    IntervalNode(String id, int start, int end) {
+        this.streamId = id;
+        this.start    = start;
+        this.end      = end;
+        this.maxEnd   = end;
+    }
+}
+
+public class Q1_IntervalTree {
+
+    // ── Insert a new interval into the BST (keyed on start) ──────────────────
+    static IntervalNode insert(IntervalNode root, String id, int start, int end) {
+        if (root == null) return new IntervalNode(id, start, end);
+
+        if (start < root.start)
+            root.left  = insert(root.left,  id, start, end);
+        else
+            root.right = insert(root.right, id, start, end);
+
+        // propagate max_end bottom-up
+        root.maxEnd = Math.max(root.end,
+                     Math.max(root.left  != null ? root.left.maxEnd  : Integer.MIN_VALUE,
+                              root.right != null ? root.right.maxEnd : Integer.MIN_VALUE));
+        return root;
+    }
+
+    // ── O(log n + k) overlap query ────────────────────────────────────────────
+    static List<String> findOverlapping(IntervalNode node, int lo, int hi,
+                                        List<String> results) {
+        if (results == null) results = new ArrayList<>();
+        if (node == null)   return results;
+
+        // TODO 1 — Prune: if lo > subtree's maxEnd, nothing here can overlap
+        if (lo > node.maxEnd) return results;
+
+        // TODO 2 — Recurse left subtree
+        findOverlapping(node.left, lo, hi, results);
+
+        // TODO 3 — Check this node's own interval: [a,b] ∩ [lo,hi] ≠ ∅ iff a≤hi AND b≥lo
+        if (node.start <= hi && node.end >= lo)
+            results.add(node.streamId);
+
+        // TODO 4 — Recurse right subtree only if node.start ≤ hi
+        if (node.start <= hi)
+            findOverlapping(node.right, lo, hi, results);
+
+        return results;
+    }
+
+    // ── Pretty-print the tree in-order ───────────────────────────────────────
+    static void printInOrder(IntervalNode node) {
+        if (node == null) return;
+        printInOrder(node.left);
+        System.out.printf("  %-4s [%d, %d]  maxEnd=%d%n",
+                          node.streamId, node.start, node.end, node.maxEnd);
+        printInOrder(node.right);
+    }
+
+    // ── Convert HH:MM to minutes-since-midnight (integer key) ────────────────
+    static int toMin(int hh, int mm) { return hh * 60 + mm; }
+
+    public static void main(String[] args) {
+
+        // Insert order: S1, S2, S3, S4, S5, S6, S7, S8  (BST keyed on start)
+        int[][] streams = {
+            {toMin(14,0),  toMin(14,30)},   // S1
+            {toMin(14,10), toMin(14,20)},   // S2
+            {toMin(14,35), toMin(15,0)},    // S3
+            {toMin(14,15), toMin(14,45)},   // S4
+            {toMin(13,50), toMin(14,5)},    // S5
+            {toMin(14,25), toMin(14,55)},   // S6
+            {toMin(14,40), toMin(14,50)},   // S7
+            {toMin(14,0),  toMin(14,15)},   // S8
+        };
+        String[] ids = {"S1","S2","S3","S4","S5","S6","S7","S8"};
+
+        IntervalNode root = null;
+        for (int i = 0; i < ids.length; i++)
+            root = insert(root, ids[i], streams[i][0], streams[i][1]);
+
+        System.out.println("=== Interval Tree (in-order) ===");
+        printInOrder(root);
+
+        // Query window: [14:25, 14:50]
+        int lo = toMin(14, 25);
+        int hi = toMin(14, 50);
+
+        List<String> result = findOverlapping(root, lo, hi, null);
+        Collections.sort(result);
+
+        System.out.printf("%n=== Overlap query [14:25, 14:50] ===%n");
+        System.out.println("Overlapping streams: " + result);
+
+        // Expected: [S1, S3, S4, S6, S7]
+    }
 }
